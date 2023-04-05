@@ -5,7 +5,7 @@ general:
   save_name: exp1
   seed: &seed 42
   cv: true
-  wandb_desabled: flase
+  wandb_desabled: false
   fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
 
@@ -22,7 +22,7 @@ mel_specgram:
   n_mels: 128
 
 model:
-  model_name: tf_mobilenetv3_small_100
+  model_name: tf_efficientnetv2_b0
   sed: true
   pretrained: true
   model_save: &model_save true
@@ -30,8 +30,8 @@ model:
   grad_checkpointing: false
   train_2nd: false
   epoch_2nd: 0
-  early_stopping: null
-  early_stopping_patience: null
+  early_stopping: true
+  early_stopping_patience: 10
 
   drop_rate: 0.5
   drop_path_rate: 0.2
@@ -56,13 +56,13 @@ model:
       pct_start: 0.1
       div_factor: 1.0e+3
       max_lr: *lr
-      epochs: &epochs 1
+      epochs: &epochs 100
 
 pl_params:
   max_epochs: *epochs
-  accelerator: "cpu" # auto
+  accelerator: auto
   accumulate_grad_batches: 1
-  precision: 32 # 16 or 32
+  precision: 16 # 16 or 32
   deterministic: true
   benchmark: false
   enable_checkpointing: *model_save
