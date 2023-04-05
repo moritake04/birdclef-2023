@@ -1,0 +1,7 @@
+/data/input/
+/data/output/
+/src/wandb/
+/src/lightning_logs/
+*.ipynb_checkpoints/
+*__pycache__/
+*DS_Store

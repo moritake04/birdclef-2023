@@ -1,0 +1,90 @@
+general:
+  project_name: birdclef2023
+  input_path: ../data/input
+  output_path: ../data/output
+  save_name: debug_sed
+  seed: &seed 42
+  cv: true
+  wandb_desabled: true
+  fold: [0] # list (0-idx start) or null. Set one element list, hold-out mode.
+  n_splits: 5
+
+audio:
+  sample_rate: 32000 # Hz
+  duration: 5 # sec
+
+mel_specgram:
+  n_fft: 2048
+  win_length: null
+  hop_length: 512
+  n_mels: 128
+
+model:
+  model_name: tf_mobilenetv3_small_100
+  sed: true
+  pretrained: true
+  model_save: &model_save true
+  save_weights_only: true
+  grad_checkpointing: false
+  train_2nd: false
+  epoch_2nd: 0
+  early_stopping: null
+  early_stopping_patience: null
+
+  drop_rate: 0.0
+  drop_path_rate: 0.0
+  aug_mix: false
+
+  in_chans: 3
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+
+  criterion: BCEWithLogitsLoss
+  weighted_loss: null
+
+  optimizer:
+    name: Adam
+    params:
+      lr: &lr 1.0e-3
+      #weight_decay: 1.0e-2
+
+  scheduler:
+    name: OneCycleLR
+    params:
+      pct_start: 0.1
+      div_factor: 1.0e+3
+      max_lr: *lr
+      epochs: &epochs 1
+
+pl_params:
+  max_epochs: *epochs
+  accelerator: "cpu" # auto
+  accumulate_grad_batches: 1
+  precision: 32 # 16 or 32
+  deterministic: true
+  benchmark: false
+  enable_checkpointing: *model_save
+  enable_model_summary: false
+  enable_progress_bar: true
+  #gradient_clip_val: 1.
+  #limit_train_batches: 0.01 # for debug
+  #limit_val_batches: 0.01 # for debug
+
+train_loader:
+  batch_size: 32
+  shuffle: true
+  num_workers: 2
+  pin_memory: true
+  drop_last: true
+valid_loader:
+  batch_size: 32
+  shuffle: false
+  num_workers: 2
+  pin_memory: true
+  drop_last: false
+test_loader:
+  batch_size: 32
+  shuffle: false
+  num_workers: 2
+  pin_memory: true
+  drop_last: false
