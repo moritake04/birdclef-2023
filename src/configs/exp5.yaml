@@ -2,7 +2,7 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: exp1
+  save_name: exp5
   seed: &seed 42
   cv: true
   wandb_desabled: false
@@ -23,15 +23,15 @@ mel_specgram:
 
 model:
   model_name: tf_efficientnetv2_b0
-  sed: true
+  sed: false
   pretrained: true
   model_save: &model_save true
   save_weights_only: true
   grad_checkpointing: false
   train_2nd: false
   epoch_2nd: 0
-  early_stopping: true
-  early_stopping_patience: 10
+  early_stopping: null
+  early_stopping_patience: null
 
   drop_rate: 0.5
   drop_path_rate: 0.2
@@ -41,7 +41,7 @@ model:
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
 
-  #criterion: BCEWithLogitsLoss
+  criterion: BCEWithLogitsLoss
   weighted_loss: null
 
   optimizer:
@@ -56,7 +56,7 @@ model:
       pct_start: 0.1
       div_factor: 1.0e+3
       max_lr: *lr
-      epochs: &epochs 100
+      epochs: &epochs 30
 
 pl_params:
   max_epochs: *epochs

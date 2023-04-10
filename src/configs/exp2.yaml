@@ -2,7 +2,7 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: exp1
+  save_name: exp2
   seed: &seed 42
   cv: true
   wandb_desabled: false
@@ -30,8 +30,8 @@ model:
   grad_checkpointing: false
   train_2nd: false
   epoch_2nd: 0
-  early_stopping: true
-  early_stopping_patience: 10
+  early_stopping: null
+  early_stopping_patience: null
 
   drop_rate: 0.5
   drop_path_rate: 0.2
@@ -56,7 +56,7 @@ model:
       pct_start: 0.1
       div_factor: 1.0e+3
       max_lr: *lr
-      epochs: &epochs 100
+      epochs: &epochs 30
 
 pl_params:
   max_epochs: *epochs

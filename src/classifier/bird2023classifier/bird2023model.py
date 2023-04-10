@@ -9,12 +9,9 @@ import torch.optim as optim
 
 
 def padded_cmap(y_true, y_score, padding_factor=5):
-    y_true = np.expand_dims(y_true, 0)
-    y_score = np.expand_dims(y_score, 0)
     new_rows = []
     for i in range(padding_factor):
         new_rows.append([1 for i in range(y_true.shape[1])])
-    new_rows = np.array(new_rows)
     padded_y_true = np.concatenate([y_true, new_rows])
     padded_y_score = np.concatenate([y_score, new_rows])
     score = sklearn.metrics.average_precision_score(
@@ -107,9 +104,9 @@ class Bird2023Model(pl.LightningModule):
         if self.cfg["model"]["aug_mix"] and torch.rand(1) < 0.5:
             X, y = batch
             if torch.rand(1) >= 0.5:
-                mixed_X, y_a, y_b, lam = self.mixup_data(X, y)
+                mixed_X, y_a, y_b, lam = self.mixup_data(X, y, alpha=self.cfg["model"]["mixup_alpha"])
             else:
-                mixed_X, y_a, y_b, lam = self.cutmix_data(X, y)
+                mixed_X, y_a, y_b, lam = self.cutmix_data(X, y, alpha=self.cfg["model"]["cutmix_alpha"])
             # mixed_X, y_a, y_b, lam = self.mixup_data(X, y)
             pred_y = self.forward(mixed_X)
             loss = self.mix_criterion(pred_y, y_a, y_b, lam)
@@ -140,7 +137,7 @@ class Bird2023Model(pl.LightningModule):
             torch.cat([x["targets"] for x in outputs], dim=0).cpu().detach().numpy()
         )
         avg_loss = torch.stack(loss_list).mean()
-        padded_cmap_score = padded_cmap(targets.flatten(), preds.flatten())
+        padded_cmap_score = padded_cmap(targets, preds)
         self.log("valid_avg_loss", avg_loss, prog_bar=True)
         self.log("valid_padded_cmap_score", padded_cmap_score, prog_bar=True)
 

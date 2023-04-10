@@ -5,7 +5,7 @@ general:
   save_name: debug
   seed: &seed 42
   cv: true
-  wandb_desabled: true
+  wandb_desabled: false
   fold: [0] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
 
@@ -60,9 +60,9 @@ model:
 
 pl_params:
   max_epochs: *epochs
-  accelerator: "cpu" # auto
+  accelerator: "auto"
   accumulate_grad_batches: 1
-  precision: 32 # 16 or 32
+  precision: 16 # 16 or 32
   deterministic: true
   benchmark: false
   enable_checkpointing: *model_save

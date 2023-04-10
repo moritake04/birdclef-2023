@@ -10,12 +10,9 @@ import torch.optim as optim
 
 
 def padded_cmap(y_true, y_score, padding_factor=5):
-    y_true = np.expand_dims(y_true, 0)
-    y_score = np.expand_dims(y_score, 0)
     new_rows = []
     for i in range(padding_factor):
         new_rows.append([1 for i in range(y_true.shape[1])])
-    new_rows = np.array(new_rows)
     padded_y_true = np.concatenate([y_true, new_rows])
     padded_y_score = np.concatenate([y_score, new_rows])
     score = sklearn.metrics.average_precision_score(
@@ -42,11 +39,14 @@ class BCEFocalLoss(nn.Module):
         return loss
 
 
-class BCEFocal2WayLoss(nn.Module):
-    def __init__(self, weights=[1, 1], class_weights=None):
+class BCE2WayLoss(nn.Module):
+    def __init__(self, weights=[1, 1], base_loss="focal"):
         super().__init__()
 
-        self.focal = BCEFocalLoss()
+        if base_loss == "focal":
+            self.base_loss = BCEFocalLoss()
+        elif base_loss == "bce":
+            self.base_loss = nn.__dict__["BCEWithLogitsLoss"]()
 
         self.weights = weights
 
@@ -57,8 +57,8 @@ class BCEFocal2WayLoss(nn.Module):
         framewise_output = input["framewise_logit"]
         clipwise_output_with_max, _ = framewise_output.max(dim=1)
 
-        loss = self.focal(input_, target)
-        aux_loss = self.focal(clipwise_output_with_max, target)
+        loss = self.base_loss(input_, target)
+        aux_loss = self.base_loss(clipwise_output_with_max, target)
 
         return self.weights[0] * loss + self.weights[1] * aux_loss
 
@@ -199,7 +199,7 @@ class Bird2023SEDModel(pl.LightningModule):
         )
         self.init_weight()
 
-        self.criterion = BCEFocal2WayLoss()
+        self.criterion = BCE2WayLoss(base_loss=cfg["model"]["base_criterion"])
 
     def init_weight(self):
         init_bn(self.bn0)
@@ -312,9 +312,9 @@ class Bird2023SEDModel(pl.LightningModule):
         if self.cfg["model"]["aug_mix"] and torch.rand(1) < 0.5:
             X, y = batch
             if torch.rand(1) >= 0.5:
-                mixed_X, y_a, y_b, lam = self.mixup_data(X, y)
+                mixed_X, y_a, y_b, lam = self.mixup_data(X, y, alpha=self.cfg["model"]["mixup_alpha"])
             else:
-                mixed_X, y_a, y_b, lam = self.cutmix_data(X, y)
+                mixed_X, y_a, y_b, lam = self.cutmix_data(X, y, alpha=self.cfg["model"]["cutmix_alpha"])
             # mixed_X, y_a, y_b, lam = self.mixup_data(X, y)
             pred_y = self.forward(mixed_X)
             loss = self.mix_criterion(pred_y, y_a, y_b, lam)
@@ -334,7 +334,15 @@ class Bird2023SEDModel(pl.LightningModule):
         X, y = batch
         pred_y = self.forward(X)
         loss = self.criterion(pred_y, y)
-        pred_y = torch.nan_to_num(pred_y["clipwise_output"])
+        
+        if self.cfg["model"]["pred_mode"] == "clipwise":
+            pred_y = pred_y["clipwise_output"]
+        elif self.cfg["model"]["pred_mode"] == "framewise_max":
+            pred_y, _ = torch.max(pred_y["framewise_output"], dim=1)
+        elif self.cfg["model"]["pred_mode"] == "framewise_mean":
+            pred_y = torch.mean(pred_y["framewise_output"], dim=1)
+        pred_y = torch.nan_to_num(pred_y)
+        
         return {"valid_loss": loss, "preds": pred_y, "targets": y}
 
     def validation_epoch_end(self, outputs):
@@ -344,7 +352,7 @@ class Bird2023SEDModel(pl.LightningModule):
             torch.cat([x["targets"] for x in outputs], dim=0).cpu().detach().numpy()
         )
         avg_loss = torch.stack(loss_list).mean()
-        padded_cmap_score = padded_cmap(targets.flatten(), preds.flatten())
+        padded_cmap_score = padded_cmap(targets, preds)
         self.log("valid_avg_loss", avg_loss, prog_bar=True)
         self.log("valid_padded_cmap_score", padded_cmap_score, prog_bar=True)
 
@@ -353,7 +361,16 @@ class Bird2023SEDModel(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         X, y = batch
         pred_y = self.forward(X)
-        return pred_y["clipwise_output"]
+        
+        if self.cfg["model"]["pred_mode"] == "clipwise":
+            pred_y = pred_y["clipwise_output"]
+        elif self.cfg["model"]["pred_mode"] == "framewise_max":
+            pred_y, _ = torch.max(pred_y["framewise_output"], dim=1)
+        elif self.cfg["model"]["pred_mode"] == "framewise_mean":
+            pred_y = torch.mean(pred_y["framewise_output"], dim=1)
+        pred_y = torch.nan_to_num(pred_y)
+        
+        return pred_y
 
     def configure_optimizers(self):
         optimizer = optim.__dict__[self.cfg["model"]["optimizer"]["name"]](

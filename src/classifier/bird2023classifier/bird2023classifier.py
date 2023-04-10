@@ -116,7 +116,11 @@ class Bird2023ClassifierInference:
     def __init__(self, cfg, weight_path=None):
         self.weight_path = weight_path
         self.cfg = cfg
-        self.model = bird2023model.Bird2023Model(self.cfg)
+        
+        if cfg["model"]["sed"]:
+            self.model = bird2023sedmodel.Bird2023SEDModel(self.cfg)
+        else:
+            self.model = bird2023model.Bird2023Model(self.cfg)
         self.trainer = Trainer(**self.cfg["pl_params"])
 
     def load_weight(self, weight_path):
@@ -127,7 +131,7 @@ class Bird2023ClassifierInference:
         print(f"loaded model ({weight_path})")
 
     def predict(self, test_X):
-        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X)
+        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X, augmentation=False)
         test_dataloader = torch.utils.data.DataLoader(
             test_dataset,
             **self.cfg["test_loader"],
@@ -150,7 +154,7 @@ class Bird2023ClassifierInference:
 
         for i, data in enumerate(test_dataset):
             preds = []
-            ogg_name = ogg_name_list[i]
+            ogg_name = ogg_name_list[i][:-4]
             for start in tqdm(
                 range(0, len(data), self.cfg["test_loader"]["batch_size"])
             ):

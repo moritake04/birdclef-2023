@@ -128,10 +128,11 @@ class Bird2023Dataset(torch.utils.data.Dataset):
 
         # To numpy
         waveform = waveform.numpy()
-        # Apply waveform augmentations
-        waveform = self.augmentation_waveform(
-            samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
-        )
+        if self.augmentation:
+            # Apply waveform augmentations
+            waveform = self.augmentation_waveform(
+                samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
+            )
         # Apply normalization
         waveform = self.normalize_waveform(
             samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
@@ -145,19 +146,23 @@ class Bird2023Dataset(torch.utils.data.Dataset):
             n_fft=self.cfg["mel_specgram"]["n_fft"],
             win_length=self.cfg["mel_specgram"]["win_length"],
             hop_length=self.cfg["mel_specgram"]["hop_length"],
+            f_min=self.cfg["mel_specgram"]["f_min"],
+            f_max=self.cfg["mel_specgram"]["f_max"],
             n_mels=self.cfg["mel_specgram"]["n_mels"],
         )(waveform)
         # Convert the mel spectrogram to a decibel scale
-        mel_specgram = torchaudio.transforms.AmplitudeToDB()(mel_specgram)
+        mel_specgram = torchaudio.transforms.AmplitudeToDB(top_db=self.cfg["mel_specgram"]["top_db"])(mel_specgram)
 
         # Apply mel spectrogram augmentations
+        #if self.augmentation:
 
+        # Apply min-max normalization to scale values between 0 and 1
+        mel_specgram = self.min_max_0_1(mel_specgram)
+        
         # Expand to n channels
         if self.cfg["model"]["in_chans"] > 1:
             mel_specgram = mel_specgram.repeat(self.cfg["model"]["in_chans"], 1, 1)
 
-        # Apply min-max normalization to scale values between 0 and 1
-        mel_specgram = self.min_max_0_1(mel_specgram)
         # Apply z-normalization to scale values to have zero mean and unit variance
         mel_specgram = self.normalize_melspecgram(mel_specgram)
 
@@ -170,14 +175,13 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
         self.ogg_name_list = ogg_name_list
         self.audio_length = cfg["audio"]["sample_rate"] * self.cfg["audio"]["duration"]
         self.step = cfg["audio"]["sample_rate"] * 5
+        
+        # Define a normalization transformation for the waveform
+        self.normalize_waveform = audiomentations.Normalize(p=1.0)
 
-        # Define a normalization transformation for the data
-        self.normalize = torchvision.transforms.Compose(
-            [
-                torchvision.transforms.Normalize(
-                    mean=self.cfg["model"]["mean"], std=self.cfg["model"]["std"]
-                )
-            ]
+        # Define a normalization transformation for the mel_specgram
+        self.normalize_melspecgram = torchvision.transforms.Normalize(
+            mean=self.cfg["model"]["mean"], std=self.cfg["model"]["std"]
         )
 
     def __len__(self):
@@ -186,7 +190,16 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
     def min_max_0_1(self, x):
         return (x - x.min()) / (x.max() - x.min())
 
-    def audio_to_mel_specgram(self, audio):
+    def audio_to_mel_specgram(self, waveform):
+        # To numpy
+        waveform = waveform.numpy()
+        # Apply normalization
+        waveform = self.normalize_waveform(
+            samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
+        )
+        # To tensor
+        waveform = torch.from_numpy(waveform)
+        
         # Compute the mel spectrogram of the waveform
         mel_specgram = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.cfg["audio"]["sample_rate"],
@@ -196,18 +209,19 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
             f_min=self.cfg["mel_specgram"]["f_min"],
             f_max=self.cfg["mel_specgram"]["f_max"],
             n_mels=self.cfg["mel_specgram"]["n_mels"],
-        )(audio)
+        )(waveform)
         # Convert the mel spectrogram to a decibel scale
-        mel_specgram = torchaudio.transforms.AmplitudeToDB()(mel_specgram)
+        mel_specgram = torchaudio.transforms.AmplitudeToDB(top_db=self.cfg["mel_specgram"]["top_db"])(mel_specgram)
 
+        # Apply min-max normalization to scale values between 0 and 1
+        mel_specgram = self.min_max_0_1(mel_specgram)
+        
         # Expand to n channels
         if self.cfg["model"]["in_chans"] > 1:
             mel_specgram = mel_specgram.repeat(self.cfg["model"]["in_chans"], 1, 1)
 
-        # Apply min-max normalization to scale values between 0 and 1
-        mel_specgram = self.min_max_0_1(mel_specgram)
         # Apply z-normalization to scale values to have zero mean and unit variance
-        mel_specgram = self.normalize(mel_specgram)
+        mel_specgram = self.normalize_melspecgram(mel_specgram)
 
         return mel_specgram
 

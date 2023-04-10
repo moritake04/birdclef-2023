@@ -2,10 +2,10 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: debug_sed
+  save_name: debug
   seed: &seed 42
   cv: true
-  wandb_desabled: true
+  wandb_desabled: false
   fold: [0] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
 
@@ -15,8 +15,10 @@ audio:
 
 mel_specgram:
   n_fft: 2048
-  win_length: null
-  hop_length: 512
+  win_length: 2048
+  hop_length: 320
+  f_min: 50
+  f_max: 14000
   n_mels: 128
 
 model:
@@ -31,9 +33,9 @@ model:
   early_stopping: null
   early_stopping_patience: null
 
-  drop_rate: 0.0
-  drop_path_rate: 0.0
-  aug_mix: false
+  drop_rate: 0.5
+  drop_path_rate: 0.2
+  aug_mix: true
 
   in_chans: 3
   mean: [0.5, 0.5, 0.5]
@@ -58,10 +60,10 @@ model:
 
 pl_params:
   max_epochs: *epochs
-  accelerator: "cpu" # auto
+  accelerator: "auto"
   accumulate_grad_batches: 1
-  precision: 32 # 16 or 32
-  deterministic: true
+  precision: 16 # 16 or 32
+  deterministic: false
   benchmark: false
   enable_checkpointing: *model_save
   enable_model_summary: false
