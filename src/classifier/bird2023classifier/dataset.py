@@ -1,4 +1,5 @@
 import audiomentations
+import numpy as np
 import torch
 import torchaudio
 import torchvision
@@ -25,24 +26,34 @@ class Bird2023Dataset(torch.utils.data.Dataset):
             [
                 audiomentations.OneOf(
                     [
-                        audiomentations.Gain(p=0.5),
-                        audiomentations.GainTransition(p=0.5),
-                    ]
+                        audiomentations.AddBackgroundNoise(
+                            sounds_path=f"{cfg['general']['input_path']}/ff1010bird_nocall/nocall", min_snr_in_db=0, max_snr_in_db=3, p=0.5
+                        ),
+                        audiomentations.AddBackgroundNoise(
+                            sounds_path=f"{cfg['general']['input_path']}/train_soundscapes/nocall", min_snr_in_db=0, max_snr_in_db=3, p=0.25
+                        ),
+                        audiomentations.AddBackgroundNoise(
+                            sounds_path=f"{cfg['general']['input_path']}/aicrowd2020_noise_30sec/noise_30sec", min_snr_in_db=0, max_snr_in_db=3, p=0.25
+                        ),
+                    ],
+                    p=0.5
                 ),
                 audiomentations.AddGaussianSNR(p=0.5),
-                # audiomentations.AddBackgroundNoise(
-                #    sounds_path=self.config.BACKGROUND_PATH,
-                #    min_snr_in_db=0,
-                #    max_snr_in_db=2,
-                #    p=0.5,
-                # ),
+                #audiomentations.OneOf(
+                #    [
+                #        audiomentations.Gain(p=0.5),
+                #        audiomentations.GainTransition(p=0.5),
+                #    ],
+                #    p=0.5
+                #),
             ]
         )
 
         # Define a normalization transformation for the waveform
         self.normalize_waveform = audiomentations.Normalize(p=1.0)
 
-        # Define augmentation methods for the waveform
+        # Define augmentation methods for the me_specgram
+        self.aug_timestretch = torchaudio.transforms.TimeStretch()
 
         # Define a normalization transformation for the mel_specgram
         self.normalize_melspecgram = torchvision.transforms.Normalize(
@@ -128,6 +139,7 @@ class Bird2023Dataset(torch.utils.data.Dataset):
 
         # To numpy
         waveform = waveform.numpy()
+        waveform = np.squeeze(waveform)
         if self.augmentation:
             # Apply waveform augmentations
             waveform = self.augmentation_waveform(
@@ -138,6 +150,7 @@ class Bird2023Dataset(torch.utils.data.Dataset):
             samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
         )
         # To tensor
+        waveform = waveform[np.newaxis, :]
         waveform = torch.from_numpy(waveform)
 
         # Compute the mel spectrogram of the waveform
@@ -154,7 +167,10 @@ class Bird2023Dataset(torch.utils.data.Dataset):
         mel_specgram = torchaudio.transforms.AmplitudeToDB(top_db=self.cfg["mel_specgram"]["top_db"])(mel_specgram)
 
         # Apply mel spectrogram augmentations
-        #if self.augmentation:
+        if self.augmentation and torch.rand(1) >= 0.5:
+            mel_specgram = torchaudio.transforms.FrequencyMasking(freq_mask_param=mel_specgram.shape[1]//10)(mel_specgram)
+            mel_specgram = torchaudio.transforms.TimeMasking(time_mask_param=mel_specgram.shape[2]//10)(mel_specgram)
+            # mel_specgram = self.aug_timestretch(mel_specgram)
 
         # Apply min-max normalization to scale values between 0 and 1
         mel_specgram = self.min_max_0_1(mel_specgram)
@@ -193,11 +209,13 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
     def audio_to_mel_specgram(self, waveform):
         # To numpy
         waveform = waveform.numpy()
+        waveform = np.squeeze(waveform)
         # Apply normalization
         waveform = self.normalize_waveform(
             samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
         )
         # To tensor
+        waveform = waveform[np.newaxis, :]
         waveform = torch.from_numpy(waveform)
         
         # Compute the mel spectrogram of the waveform
