@@ -38,7 +38,7 @@ class Bird2023Dataset(torch.utils.data.Dataset):
                     ],
                     p=0.5
                 ),
-                audiomentations.AddGaussianSNR(p=0.5),
+                #audiomentations.AddGaussianSNR(p=0.5),
                 #audiomentations.OneOf(
                 #    [
                 #        audiomentations.Gain(p=0.5),

@@ -1,0 +1,98 @@
+general:
+  project_name: birdclef2023
+  input_path: ../data/input
+  output_path: ../data/output
+  save_name: exp23_nov_nonoise
+  seed: &seed 42
+  cv: true
+  wandb_desabled: false
+  fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
+  n_splits: 5
+
+audio:
+  sample_rate: 32000 # Hz
+  duration: 5 # sec
+
+mel_specgram:
+  n_fft: 2048
+  win_length: 2048
+  hop_length: 320
+  f_min: 50
+  f_max: 14000
+  n_mels: 128
+  top_db: 80
+
+model:
+  model_name: tf_efficientnetv2_b0
+  pretrained: true
+  model_save: &model_save true
+  save_weights_only: true
+  grad_checkpointing: false
+  train_2nd: false
+  epoch_2nd: 0
+  early_stopping: null
+  early_stopping_patience: null
+
+  drop_rate: 0.2
+  drop_path_rate: 0.2
+  aug_mix: true
+  mixup_alpha: 0.5
+  cutmix_alpha: 0.5
+
+  in_chans: 3
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+  criterion: BCEWithLogitsLoss
+  weighted_loss: null
+  
+  sed: true
+  base_criterion: "bce"
+  pred_mode: "clipwise"
+
+  optimizer:
+    name: AdamW
+    params:
+      lr: &lr 1.0e-3
+      weight_decay: 1.0e-2
+
+  scheduler:
+    name: OneCycleLR
+    params:
+      pct_start: 0.1
+      div_factor: 1.0e+3
+      max_lr: *lr
+      epochs: &epochs 30
+
+pl_params:
+  max_epochs: *epochs
+  accelerator: auto
+  accumulate_grad_batches: 1
+  precision: 16 # 16 or 32
+  deterministic: false
+  benchmark: false
+  enable_checkpointing: *model_save
+  enable_model_summary: false
+  enable_progress_bar: true
+  #gradient_clip_val: 1.
+  #limit_train_batches: 0.01 # for debug
+  #limit_val_batches: 0.01 # for debug
+
+train_loader:
+  batch_size: 32
+  shuffle: true
+  num_workers: 2
+  pin_memory: true
+  drop_last: true
+valid_loader:
+  batch_size: 32
+  shuffle: false
+  num_workers: 2
+  pin_memory: true
+  drop_last: false
+test_loader:
+  batch_size: 32
+  shuffle: false
+  num_workers: 2
+  pin_memory: true
+  drop_last: false
