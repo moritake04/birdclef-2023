@@ -2,7 +2,7 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: exp24_second
+  save_name: exp24_second05
   seed: &seed 42
   cv: true
   wandb_desabled: false
@@ -12,7 +12,7 @@ general:
 audio:
   sample_rate: 32000 # Hz
   duration: 5 # sec
-  secondary_label: true
+  second_label: true
 
 mel_specgram:
   n_fft: 2048

@@ -351,6 +351,8 @@ class Bird2023SEDModel(pl.LightningModule):
         targets = (
             torch.cat([x["targets"] for x in outputs], dim=0).cpu().detach().numpy()
         )
+        if self.cfg["audio"]["second_label"]:
+            targets[targets < 1.0] = 0.0
         avg_loss = torch.stack(loss_list).mean()
         padded_cmap_score = padded_cmap(targets, preds)
         self.log("valid_avg_loss", avg_loss, prog_bar=True)
