@@ -116,7 +116,7 @@ class Bird2023ClassifierInference:
     def __init__(self, cfg, weight_path=None):
         self.weight_path = weight_path
         self.cfg = cfg
-        
+
         if cfg["model"]["sed"]:
             self.model = bird2023sedmodel.Bird2023SEDModel(self.cfg)
         else:

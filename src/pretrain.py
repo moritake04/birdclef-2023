@@ -139,7 +139,7 @@ def main():
             for secondary_label in each_secondary_labels:
                 for bird in birds:
                     if secondary_label == bird:
-                        train.loc[idx, bird] = 0.5
+                        train.loc[idx, bird] = 1
     train_y = train.iloc[:, -264:]
     cfg["model"]["num_classes"] = len(train_y.columns)
 
