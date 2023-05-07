@@ -3,15 +3,52 @@ import numpy as np
 import torch
 import torchaudio
 import torchvision
+import colorednoise as cn
+
+
+class AudioTransform:
+    def __init__(self, always_apply=False, p=0.5):
+        self.always_apply = always_apply
+        self.p = p
+
+    def __call__(self, y: np.ndarray, sr):
+        if self.always_apply:
+            return self.apply(y, sr=sr)
+        else:
+            if np.random.rand() < self.p:
+                return self.apply(y, sr=sr)
+            else:
+                return y
+
+    def apply(self, y: np.ndarray, **params):
+        raise NotImplementedError
+
+
+class PinkNoise(AudioTransform):
+    def __init__(self, always_apply=False, p=0.5, min_snr=5, max_snr=20):
+        super().__init__(always_apply, p)
+
+        self.min_snr = min_snr
+        self.max_snr = max_snr
+
+    def apply(self, y: np.ndarray, **params):
+        snr = np.random.uniform(self.min_snr, self.max_snr)
+        a_signal = np.sqrt(y ** 2).max()
+        a_noise = a_signal / (10 ** (snr / 20))
+
+        pink_noise = cn.powerlaw_psd_gaussian(1, len(y))
+        a_pink = np.sqrt(pink_noise ** 2).max()
+        augmented = (y + pink_noise * 1 / a_pink * a_noise).astype(y.dtype)
+        return augmented
 
 
 class Bird2023Dataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, X, y=None, augmentation=False):
+    def __init__(self, cfg, X, y=None, train=True):
         self.cfg = cfg
-        self.augmentation = augmentation
+        self.train = train
         self.df = X
-        self.audio_length = cfg["audio"]["sample_rate"] * self.cfg["audio"]["duration"]
-
+        self.audio_length = cfg["audio"]["sample_rate"] * self.cfg["audio"]["train_duration"] if train else cfg["audio"]["sample_rate"] * self.cfg["audio"]["valid_duration"] 
+        
         # If labels are not provided, create a zero tensor of shape (len(X), num_columns_X)
         if y is None:
             self.y = torch.zeros(
@@ -22,9 +59,7 @@ class Bird2023Dataset(torch.utils.data.Dataset):
             self.y = torch.tensor(y.values, dtype=torch.float32)
 
         # Define augmentation methods for the waveform
-        self.augmentation_waveform = audiomentations.Compose(
-            [
-                audiomentations.OneOf(
+        self.augmentation_backgroundnoise = audiomentations.OneOf(
                     [
                         audiomentations.AddBackgroundNoise(
                             sounds_path=f"{cfg['general']['input_path']}/ff1010bird_nocall/nocall",
@@ -46,17 +81,22 @@ class Bird2023Dataset(torch.utils.data.Dataset):
                         ),
                     ],
                     p=0.5,
-                ),
-                audiomentations.AddGaussianSNR(p=0.5),
-                # audiomentations.OneOf(
-                #    [
-                #        audiomentations.Gain(p=0.5),
-                #        audiomentations.GainTransition(p=0.5),
-                #    ],
-                #    p=0.5
-                # ),
-            ]
-        )
+                )
+        self.augmentation_gaussiannoise = audiomentations.OneOf(
+                    [
+                        audiomentations.AddGaussianSNR(p=0.5),
+                        audiomentations.AddGaussianNoise(p=0.5)
+                    ],
+                    p=0.5
+                )
+        self.augmentation_gain = audiomentations.OneOf(
+                    [
+                        audiomentations.Gain(p=0.5),
+                        audiomentations.GainTransition(p=0.5),
+                    ],
+                    p=0.5
+                )
+        self.augmentation_pinknoise = PinkNoise(p=0.5)
 
         # Define a normalization transformation for the waveform
         self.normalize_waveform = audiomentations.Normalize(p=1.0)
@@ -74,6 +114,12 @@ class Bird2023Dataset(torch.utils.data.Dataset):
 
     def min_max_0_1(self, x):
         return (x - x.min()) / (x.max() - x.min())
+    
+    def z_normalize(self, x):
+        mean = torch.mean(x)
+        std = torch.std(x) + 1e-6
+        x_normalized = (x - mean) / std
+        return x_normalized
 
     def repeat_waveform(self, audio, target_len):
         # Get the length of the audio waveform
@@ -126,14 +172,21 @@ class Bird2023Dataset(torch.utils.data.Dataset):
         return audio
 
     def __getitem__(self, index):
-        # Retrieve the filename of the audio file at the given index
-        file_path = self.df.loc[index, "filename"]
         # Retrieve the label of the audio file at the given index
         y = self.y[index]
         # Load the audio waveform and its sample rate from the file path
-        waveform, sample_rate = torchaudio.load(
-            self.cfg["general"]["input_path"] + "/train_audio/" + file_path
-        )
+        if self.cfg["job_type"] == "pretrain":
+            # Retrieve the filename of the audio file at the given index
+            file_path = self.df.loc[index, "filepath"]
+            waveform, sample_rate = torchaudio.load(
+                self.cfg["general"]["pretrain_input_path"] + "/" + file_path + ".ogg"
+            )
+        else:
+            # Retrieve the filename of the audio file at the given index
+            file_path = self.df.loc[index, "filename"]
+            waveform, sample_rate = torchaudio.load(
+                self.cfg["general"]["input_path"] + "/" + file_path
+            )
 
         # Resample the waveform if the sample rate is not equal to the target sample rate
         if sample_rate != self.cfg["audio"]["sample_rate"]:
@@ -144,16 +197,27 @@ class Bird2023Dataset(torch.utils.data.Dataset):
         # Repeat waveform
         waveform = self.repeat_waveform(waveform, self.audio_length)
         # Crop or pad the waveform to a fixed duration
-        waveform = self.crop_or_pad_waveform_constant(waveform, self.audio_length)
-
+        if self.train and torch.rand(1) >= 0.5:
+            waveform = self.crop_or_pad_waveform_random(waveform, self.audio_length)
+        else:
+            waveform = self.crop_or_pad_waveform_constant(waveform, self.audio_length)
+        
+        # Stereo to mono
+        if waveform.shape[0] == 2:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
         # To numpy
         waveform = waveform.numpy()
         waveform = np.squeeze(waveform)
-        if self.augmentation:
+        if self.train:
             # Apply waveform augmentations
-            waveform = self.augmentation_waveform(
+            waveform = self.augmentation_backgroundnoise(
                 samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
             )
+            waveform = self.augmentation_gaussiannoise(
+                samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
+            )
+            #waveform = self.augmentation_gain(samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"])
         # Apply normalization
         waveform = self.normalize_waveform(
             samples=waveform, sample_rate=self.cfg["audio"]["sample_rate"]
@@ -178,14 +242,17 @@ class Bird2023Dataset(torch.utils.data.Dataset):
         )(mel_specgram)
 
         # Apply mel spectrogram augmentations
-        if self.augmentation and torch.rand(1) >= 0.5:
+        if self.train and torch.rand(1) >= 0.5:
             mel_specgram = torchaudio.transforms.FrequencyMasking(
-                freq_mask_param=mel_specgram.shape[1] // 10
+                freq_mask_param=mel_specgram.shape[1] // 5
             )(mel_specgram)
             mel_specgram = torchaudio.transforms.TimeMasking(
-                time_mask_param=mel_specgram.shape[2] // 10
+                time_mask_param=mel_specgram.shape[2] // 5
             )(mel_specgram)
             # mel_specgram = self.aug_timestretch(mel_specgram)
+            
+        # Apply z-norm, each melspec
+        #mel_specgram = self.z_normalize(mel_specgram)
 
         # Apply min-max normalization to scale values between 0 and 1
         mel_specgram = self.min_max_0_1(mel_specgram)
@@ -196,6 +263,8 @@ class Bird2023Dataset(torch.utils.data.Dataset):
 
         # Apply z-normalization to scale values to have zero mean and unit variance
         mel_specgram = self.normalize_melspecgram(mel_specgram)
+        
+        mel_specgram = torch.nan_to_num(mel_specgram)
 
         return mel_specgram, y
 
@@ -204,7 +273,7 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
     def __init__(self, cfg, ogg_name_list):
         self.cfg = cfg
         self.ogg_name_list = ogg_name_list
-        self.audio_length = cfg["audio"]["sample_rate"] * self.cfg["audio"]["duration"]
+        self.audio_length = cfg["audio"]["sample_rate"] * self.cfg["audio"]["test_duration"]
         self.step = cfg["audio"]["sample_rate"] * 5
 
         # Define a normalization transformation for the waveform
@@ -247,6 +316,9 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
         mel_specgram = torchaudio.transforms.AmplitudeToDB(
             top_db=self.cfg["mel_specgram"]["top_db"]
         )(mel_specgram)
+        
+        # Apply z-norm, each melspec
+        #mel_specgram = self.z_normalize(mel_specgram)
 
         # Apply min-max normalization to scale values between 0 and 1
         mel_specgram = self.min_max_0_1(mel_specgram)
@@ -257,6 +329,7 @@ class Bird2023TestDataset(torch.utils.data.Dataset):
 
         # Apply z-normalization to scale values to have zero mean and unit variance
         mel_specgram = self.normalize_melspecgram(mel_specgram)
+        mel_specgram = torch.nan_to_num(mel_specgram)
 
         return mel_specgram
 

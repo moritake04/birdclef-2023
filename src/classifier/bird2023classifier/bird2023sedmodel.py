@@ -21,6 +21,20 @@ def padded_cmap(y_true, y_score, padding_factor=5):
     return score
 
 
+class LabelSmoothingBCEWithLogitsLoss(nn.Module):
+    def __init__(self, smooth_eps=0.0025, weight=None, reduction="mean"):
+        super(LabelSmoothingBCEWithLogitsLoss, self).__init__()
+        self.smooth_eps = smooth_eps
+        self.weight = weight
+        self.reduction = reduction
+        self.bce_with_logits_loss = nn.BCEWithLogitsLoss(weight=self.weight, reduction=self.reduction)
+
+    def forward(self, input, target):
+        target_smooth = torch.clamp(target.float(), self.smooth_eps, 1.0 - self.smooth_eps)
+        target_smooth = target_smooth + (self.smooth_eps / target.size(1))
+        return self.bce_with_logits_loss(input, target_smooth)
+
+
 # https://www.kaggle.com/c/rfcx-species-audio-detection/discussion/213075
 class BCEFocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0):
@@ -47,6 +61,8 @@ class BCE2WayLoss(nn.Module):
             self.base_loss = BCEFocalLoss()
         elif base_loss == "bce":
             self.base_loss = nn.__dict__["BCEWithLogitsLoss"]()
+        elif base_loss == "bce_smooth":
+            self.base_loss = LabelSmoothingBCEWithLogitsLoss()
 
         self.weights = weights
 
@@ -187,23 +203,38 @@ class Bird2023SEDModel(pl.LightningModule):
             base_model.set_grad_checkpointing(enable=True)
 
         self.bn0 = nn.BatchNorm2d(cfg["mel_specgram"]["n_mels"])
-        layers = list(base_model.children())[:-2]
-        self.encoder = nn.Sequential(*layers)
         if hasattr(base_model, "fc"):
+            layers = list(base_model.children())[:-2]
+            self.encoder = nn.Sequential(*layers)
             in_features = base_model.fc.in_features
+        elif "eca_nfnet" in self.cfg["model"]["model_name"]:
+            layers = list(base_model.children())[:-1]
+            self.encoder = nn.Sequential(*layers)
+            in_features = base_model.head.fc.in_features
         else:
+            layers = list(base_model.children())[:-2]
+            self.encoder = nn.Sequential(*layers)
             in_features = base_model.classifier.in_features
-        self.fc1 = nn.Linear(in_features, in_features, bias=True)
+        self.in_features = in_features
+        self.fc1 = nn.Linear(self.in_features, self.in_features, bias=True)
         self.att_block = AttBlockV2(
-            in_features, cfg["model"]["num_classes"], activation="sigmoid"
+            self.in_features, cfg["model"]["num_classes"], activation="sigmoid"
         )
         self.init_weight()
 
-        self.criterion = BCE2WayLoss(base_loss=cfg["model"]["base_criterion"])
+        if self.cfg["model"]["criterion"] is None:
+            self.criterion = BCE2WayLoss(base_loss=cfg["model"]["base_criterion"])
+        else:
+            self.criterion = nn.__dict__[cfg["model"]["criterion"]]()
 
     def init_weight(self):
         init_bn(self.bn0)
         init_layer(self.fc1)
+        
+    def set_head(self, out_features):
+        self.att_block = AttBlockV2(
+            self.in_features, out_features, activation="sigmoid"
+        )
 
     def forward(self, X):
         # X: (batch_size, 3, mel_bins, time_steps)
@@ -220,7 +251,7 @@ class Bird2023SEDModel(pl.LightningModule):
         X1 = F.max_pool1d(X, kernel_size=3, stride=1, padding=1)
         X2 = F.avg_pool1d(X, kernel_size=3, stride=1, padding=1)
         X = X1 + X2
-
+        
         X = F.dropout(X, p=self.cfg["model"]["drop_rate"], training=self.training)
         X = X.transpose(1, 2)
         X = F.relu_(self.fc1(X))
@@ -317,10 +348,14 @@ class Bird2023SEDModel(pl.LightningModule):
                 mixed_X, y_a, y_b, lam = self.cutmix_data(X, y, alpha=self.cfg["model"]["cutmix_alpha"])
             # mixed_X, y_a, y_b, lam = self.mixup_data(X, y)
             pred_y = self.forward(mixed_X)
+            if self.cfg["model"]["criterion"] is not None:
+                pred_y = pred_y["logit"]
             loss = self.mix_criterion(pred_y, y_a, y_b, lam)
         else:
             X, y = batch
             pred_y = self.forward(X)
+            if self.cfg["model"]["criterion"] is not None:
+                pred_y = pred_y["logit"]
             loss = self.criterion(pred_y, y)
         self.log("train_loss", loss, prog_bar=True)
         return loss
@@ -333,7 +368,10 @@ class Bird2023SEDModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         X, y = batch
         pred_y = self.forward(X)
-        loss = self.criterion(pred_y, y)
+        if self.cfg["model"]["criterion"] is None:
+            loss = self.criterion(pred_y, y)
+        else:
+            loss = self.criterion(pred_y["logit"], y)
         
         if self.cfg["model"]["pred_mode"] == "clipwise":
             pred_y = pred_y["clipwise_output"]

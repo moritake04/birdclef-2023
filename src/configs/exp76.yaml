@@ -2,10 +2,10 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: debug
+  save_name: exp76_batchup
   seed: &seed 42
   cv: true
-  wandb_desabled: true
+  wandb_desabled: false
   fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
   
@@ -28,10 +28,10 @@ mel_specgram:
   top_db: 80
 
 model:
-  model_name: tf_efficientnet_b0
+  model_name: eca_nfnet_l0
   pretrained: true
   model_save: &model_save true
-  save_weights_only: true
+  save_weights_only: false
   grad_checkpointing: false
   train_2nd: false
   epoch_2nd: 0
@@ -54,6 +54,9 @@ model:
   sed: true
   base_criterion: "bce_smooth"
   pred_mode: "clipwise"
+  
+  pretrained_path: ../data/output/pretrain/weights/pretrain_exp12/last_epoch_fold0.ckpt
+  pretrained_classes: 506
 
   optimizer:
     name: AdamW
@@ -79,18 +82,19 @@ pl_params:
   enable_checkpointing: *model_save
   enable_model_summary: false
   enable_progress_bar: true
+  #check_val_every_n_epoch: 2
   #gradient_clip_val: 1.
   #limit_train_batches: 0.01 # for debug
   #limit_val_batches: 0.01 # for debug
 
 train_loader:
-  batch_size: 32
+  batch_size: 128
   shuffle: true
   num_workers: 2
   pin_memory: true
   drop_last: true
 valid_loader:
-  batch_size: 32
+  batch_size: 128
   shuffle: false
   num_workers: 2
   pin_memory: true

@@ -3,16 +3,20 @@ general:
   pretrain_input_path: /data/input
   input_path: ../data/input
   output_path: ../data/output/pretrain
-  save_name: pretrain_exp1
+  save_name: pretrain_exp2
   seed: &seed 42
-  cv: false
+  cv: true
   wandb_desabled: false
-  #fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
-  #n_splits: 5
+  fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
+  n_splits: 5
+  
+oversampling: 50
 
 audio:
   sample_rate: 32000 # Hz
-  duration: 5 # sec
+  train_duration: 5 # sec
+  valid_duration: 5
+  test_duration: 5
   second_label: true
 
 mel_specgram:
@@ -25,12 +29,12 @@ mel_specgram:
   top_db: 80
 
 model:
-  model_name: tf_efficientnetv2_b0
+  model_name: eca_nfnet_l0
   pretrained: true
   model_save: &model_save true
-  save_weights_only: true
+  save_weights_only: false
   grad_checkpointing: false
-  train_2nd: true
+  train_2nd: false
   epoch_2nd: 0
   early_stopping: null
   early_stopping_patience: null
@@ -45,7 +49,7 @@ model:
   mean: [0.485, 0.456, 0.406]
   std: [0.229, 0.224, 0.225]
 
-  criterion: BCEWithLogitsLoss
+  criterion: null
   weighted_loss: null
   
   sed: true
@@ -70,7 +74,7 @@ pl_params:
   max_epochs: *epochs
   accelerator: auto
   accumulate_grad_batches: 1
-  precision: 16 # 16 or 32
+  precision: 32 # 16 or 32
   deterministic: false
   benchmark: false
   enable_checkpointing: *model_save
@@ -93,7 +97,7 @@ valid_loader:
   pin_memory: true
   drop_last: false
 test_loader:
-  batch_size: 32
+  batch_size: 8
   shuffle: false
   num_workers: 2
   pin_memory: true

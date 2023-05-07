@@ -12,7 +12,7 @@ class Bird2023Classifier:
     def __init__(self, cfg, train_X, train_y, valid_X=None, valid_y=None):
         # Create datasets
         train_dataset = dataset.Bird2023Dataset(
-            cfg, train_X, train_y, augmentation=True
+            cfg, train_X, train_y, train=True
         )
 
         # Create Data loader
@@ -26,7 +26,7 @@ class Bird2023Classifier:
             self.valid_dataloader = None
         else:
             valid_dataset = dataset.Bird2023Dataset(
-                cfg, valid_X, valid_y, augmentation=False
+                cfg, valid_X, valid_y, train=False
             )
             self.valid_dataloader = torch.utils.data.DataLoader(
                 valid_dataset,
@@ -92,7 +92,7 @@ class Bird2023Classifier:
 
     def predict(self, test_X, weight_path=None):
         preds = []
-        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X)
+        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X, train=False)
         test_dataloader = torch.utils.data.DataLoader(
             test_dataset,
             **self.cfg["test_loader"],
@@ -131,7 +131,7 @@ class Bird2023ClassifierInference:
         print(f"loaded model ({weight_path})")
 
     def predict(self, test_X):
-        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X, augmentation=False)
+        test_dataset = dataset.Bird2023Dataset(self.cfg, test_X, train=False)
         test_dataloader = torch.utils.data.DataLoader(
             test_dataset,
             **self.cfg["test_loader"],

@@ -2,10 +2,10 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: debug
+  save_name: exp56
   seed: &seed 42
   cv: true
-  wandb_desabled: true
+  wandb_desabled: false
   fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
   
@@ -21,14 +21,14 @@ audio:
 mel_specgram:
   n_fft: 2048
   win_length: 2048
-  hop_length: 320
+  hop_length: 512
   f_min: 50
   f_max: 14000
   n_mels: 128
   top_db: 80
 
 model:
-  model_name: tf_efficientnet_b0
+  model_name: eca_nfnet_l0
   pretrained: true
   model_save: &model_save true
   save_weights_only: true
@@ -52,7 +52,7 @@ model:
   weighted_loss: null
   
   sed: true
-  base_criterion: "bce_smooth"
+  base_criterion: "bce"
   pred_mode: "clipwise"
 
   optimizer:

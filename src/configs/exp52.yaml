@@ -2,10 +2,10 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: debug
+  save_name: exp52_focal
   seed: &seed 42
   cv: true
-  wandb_desabled: true
+  wandb_desabled: false
   fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
   n_splits: 5
   
@@ -28,7 +28,7 @@ mel_specgram:
   top_db: 80
 
 model:
-  model_name: tf_efficientnet_b0
+  model_name: eca_nfnet_l0
   pretrained: true
   model_save: &model_save true
   save_weights_only: true
@@ -52,7 +52,7 @@ model:
   weighted_loss: null
   
   sed: true
-  base_criterion: "bce_smooth"
+  base_criterion: "focal"
   pred_mode: "clipwise"
 
   optimizer:
