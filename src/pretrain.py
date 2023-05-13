@@ -103,9 +103,20 @@ def wandb_start(cfg):
 
 
 def train_and_predict(cfg, train_X, train_y, valid_X=None, valid_y=None):
-    model = bird2023classifier.Bird2023Classifier(
-        cfg, train_X, train_y, valid_X=valid_X, valid_y=valid_y
-    )
+    if cfg["model"]["pretrained_path"] is not None:
+        print("Using pretrained model (past bird-clef comp)")
+        print(cfg["model"]["pretrained_path"])
+        tmp_num_classes = cfg["model"]["num_classes"]
+        cfg["model"]["num_classes"] = cfg["model"]["pretrained_classes"]
+        model = bird2023classifier.Bird2023Classifier(
+            cfg, train_X, train_y, valid_X=valid_X, valid_y=valid_y
+        )
+        model.load_weight(cfg["model"]["pretrained_path"])
+        model.model.set_head(tmp_num_classes)
+    else:
+        model = bird2023classifier.Bird2023Classifier(
+            cfg, train_X, train_y, valid_X=valid_X, valid_y=valid_y
+        )   
     model.train(weight_path=cfg["ckpt_path"])
 
     if valid_X is None:
@@ -172,6 +183,14 @@ def one_fold(skf, cfg, train_X, train_y, fold_n):
 def all_train(cfg, train_X, train_y):
     print("[all_train] start")
     seed_everything(cfg["general"]["seed"], workers=True)
+    
+    print(len(train_X))
+    if cfg["oversampling"] is not None:
+        train = pd.concat([train_X, train_y], axis=1).reset_index(drop=True)
+        train = upsample_data(train, thr=cfg["oversampling"], seed=cfg["general"]["seed"])
+        #train_cv = downsample_data(train_cv, thr=cfg["undersampling"], seed=cfg["general"]["seed"])
+        train_X, train_y = train.iloc[:, :-cfg["model"]["num_classes"]], train.iloc[:, -cfg["model"]["num_classes"]:]
+        print(len(train_X))
 
     # train
     train_and_predict(cfg, train_X, train_y)
@@ -186,7 +205,9 @@ def main():
         cfg = yaml.safe_load(f)
     if args.fold is not None:
         cfg["general"]["fold"] = [args.fold]
-    print(f"fold: {cfg['general']['fold']}")
+        print(f"fold: {cfg['general']['fold']}")
+    else:
+        print("all train")
 
     # Set jobtype for wandb
     cfg["job_type"] = "pretrain"

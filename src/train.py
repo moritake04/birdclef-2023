@@ -140,7 +140,6 @@ def one_fold(skf, cfg, train_X, train_y, fold_n):
         
     # Add nocall data
     #"""
-    f"{cfg['general']['input_path']}/aicrowd2020_noise_30sec/noise_30sec"
     datadir = Path(f"{cfg['general']['input_path']}/aicrowd2020_noise_30sec/noise_30sec/")
     all_audios = list(datadir.glob("*.ogg"))
     aicrowd2020 = ["aicrowd2020_noise_30sec/noise_30sec/" + ogg_name.name for ogg_name in all_audios]
@@ -175,6 +174,31 @@ def one_fold(skf, cfg, train_X, train_y, fold_n):
 def all_train(cfg, train_X, train_y):
     print("[all_train] start")
     seed_everything(cfg["general"]["seed"], workers=True)
+    
+    if cfg["oversampling"] is not None:
+        train = pd.concat([train_X, train_y], axis=1).reset_index(drop=True)
+        train = upsample_data(train, thr=cfg["oversampling"], seed=cfg["general"]["seed"])
+        train_X, train_y = train.iloc[:, :-264], train.iloc[:, -264:]
+        print(len(train_X))
+    
+    # Add nocall data
+    #"""
+    datadir = Path(f"{cfg['general']['input_path']}/aicrowd2020_noise_30sec/noise_30sec/")
+    all_audios = list(datadir.glob("*.ogg"))
+    aicrowd2020 = ["aicrowd2020_noise_30sec/noise_30sec/" + ogg_name.name for ogg_name in all_audios]
+    datadir = Path(f"{cfg['general']['input_path']}/ff1010bird_nocall/nocall/")
+    all_audios = list(datadir.glob("*.ogg"))
+    ff1010bird_nocall = ["ff1010bird_nocall/nocall/" + ogg_name.name for ogg_name in all_audios]
+    datadir = Path(f"{cfg['general']['input_path']}/train_soundscapes/nocall/")
+    all_audios = list(datadir.glob("*.ogg"))
+    train_soundscapes = ["train_soundscapes/nocall/" + ogg_name.name for ogg_name in all_audios]
+    df_X = pd.DataFrame(columns=train_X.columns)
+    df_X["filename"] = aicrowd2020 + ff1010bird_nocall + train_soundscapes
+    df_y = pd.DataFrame(columns=train_y.columns, data=np.zeros((len(df_X), 264)))
+    train_X = pd.concat([train_X, df_X], axis=0).reset_index(drop=True)
+    train_y = pd.concat([train_y, df_y], axis=0).reset_index(drop=True)
+    print(len(train_X))
+    #"""
 
     # train
     train_and_predict(cfg, train_X, train_y)
@@ -189,7 +213,9 @@ def main():
         cfg = yaml.safe_load(f)
     if args.fold is not None:
         cfg["general"]["fold"] = [args.fold]
-    print(f"fold: {cfg['general']['fold']}")
+        print(f"fold: {cfg['general']['fold']}")
+    else:
+        print("all train")
 
     # Set jobtype for wandb
     cfg["job_type"] = "train"

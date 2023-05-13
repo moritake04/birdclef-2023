@@ -3,7 +3,7 @@ general:
   pretrain_input_path: /data/input
   input_path: ../data/input
   output_path: ../data/output/pretrain
-  save_name: pretrain_exp13_all
+  save_name: pretrain_exp16_all
   seed: &seed 42
   cv: false
   wandb_desabled: false
@@ -16,7 +16,7 @@ drop: false
 
 audio:
   sample_rate: 32000 # Hz
-  train_duration: 15 # sec
+  train_duration: 30 # sec
   valid_duration: 5
   test_duration: 5
   second_label: true
@@ -57,6 +57,9 @@ model:
   sed: true
   base_criterion: "bce_smooth"
   pred_mode: "clipwise"
+  
+  pretrained_path: ../data/output/pretrain/weights/pretrain_exp13_all/last_epoch.ckpt
+  pretrained_classes: 506
 
   optimizer:
     name: AdamW
