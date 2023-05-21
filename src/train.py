@@ -76,7 +76,8 @@ def wandb_start(cfg):
 
 
 def train_and_predict(cfg, train_X, train_y, valid_X=None, valid_y=None):
-    if cfg["model"]["pretrained_path"] is not None:
+    if cfg["model"]["pretrained_path"] is not None and cfg["model"]["sed"]:
+        print("sed pretrained")
         print("Using pretrained model (past bird-clef comp)")
         print(cfg["model"]["pretrained_path"])
         tmp_num_classes = cfg["model"]["num_classes"]
@@ -86,6 +87,13 @@ def train_and_predict(cfg, train_X, train_y, valid_X=None, valid_y=None):
         )
         model.load_weight(cfg["model"]["pretrained_path"])
         model.model.set_head(tmp_num_classes)
+    elif cfg["model"]["pretrained_path"] is not None:
+        print("no sed pretrained")
+        print("Using pretrained model (past bird-clef comp)")
+        print(cfg["model"]["pretrained_path"])
+        model = bird2023classifier.Bird2023Classifier(
+            cfg, train_X, train_y, valid_X=valid_X, valid_y=valid_y
+        )
     else:
         model = bird2023classifier.Bird2023Classifier(
             cfg, train_X, train_y, valid_X=valid_X, valid_y=valid_y

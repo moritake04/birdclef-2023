@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from . import bird2023model, bird2023sedmodel, dataset
 
 def padded_cmap(y_true, y_score, padding_factor=5):
     new_rows = []
@@ -20,24 +21,72 @@ def padded_cmap(y_true, y_score, padding_factor=5):
     return score
 
 
+class LabelSmoothingBCEWithLogitsLoss(nn.Module):
+    def __init__(self, smooth_eps=0.0025, weight=None, reduction="mean"):
+        super(LabelSmoothingBCEWithLogitsLoss, self).__init__()
+        self.smooth_eps = smooth_eps
+        self.weight = weight
+        self.reduction = reduction
+        self.bce_with_logits_loss = nn.BCEWithLogitsLoss(weight=self.weight, reduction=self.reduction)
+
+    def forward(self, input, target):
+        target_smooth = torch.clamp(target.float(), self.smooth_eps, 1.0 - self.smooth_eps)
+        target_smooth = target_smooth + (self.smooth_eps / target.size(1))
+        return self.bce_with_logits_loss(input, target_smooth)
+
+
 class Bird2023Model(pl.LightningModule):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.model = timm.create_model(
-            model_name=cfg["model"]["model_name"],
-            pretrained=cfg["model"]["pretrained"],
-            in_chans=cfg["model"]["in_chans"],
-            num_classes=cfg["model"]["num_classes"],
-            drop_rate=cfg["model"]["drop_rate"],
-            drop_path_rate=cfg["model"]["drop_path_rate"],
-        )
+        
+        if cfg["model"]["pretrained_path"]:
+            tmp_num_classes = cfg["model"]["num_classes"]
+            cfg["model"]["num_classes"] = cfg["model"]["pretrained_classes"]
+            sed_model = bird2023sedmodel.Bird2023SEDModel(cfg)
+            sed_model = sed_model.load_from_checkpoint(
+                checkpoint_path=cfg["model"]["pretrained_path"],
+                cfg=cfg
+            )
+            sed_model.set_head(tmp_num_classes)
+            cfg["model"]["num_classes"] = tmp_num_classes
+            
+            base_model = timm.create_model(
+                model_name=cfg["model"]["model_name"],
+                pretrained=cfg["model"]["pretrained"],
+                in_chans=cfg["model"]["in_chans"],
+                num_classes=cfg["model"]["num_classes"],
+                drop_rate=cfg["model"]["drop_rate"],
+                drop_path_rate=cfg["model"]["drop_path_rate"],
+            )
+            
+            if "eca_nfnet" in self.cfg["model"]["model_name"]:
+                layers = list(sed_model.encoder) + list(base_model.children())[-1:]
+            else:
+                layers = list(sed_model.encoder) + list(base_model.children())[-2:]
+            
+            self.model = nn.Sequential(*layers)
+            del sed_model, base_model
+            torch.cuda.empty_cache()
+        else:
+            self.model = timm.create_model(
+                model_name=cfg["model"]["model_name"],
+                pretrained=cfg["model"]["pretrained"],
+                in_chans=cfg["model"]["in_chans"],
+                num_classes=cfg["model"]["num_classes"],
+                drop_rate=cfg["model"]["drop_rate"],
+                drop_path_rate=cfg["model"]["drop_path_rate"],
+            )
 
-        self.criterion = nn.__dict__[cfg["model"]["criterion"]]()
+        if cfg["model"]["criterion"] == "bce_smooth":
+            self.criterion = LabelSmoothingBCEWithLogitsLoss()
+        else:
+            self.criterion = nn.__dict__[cfg["model"]["criterion"]]()
 
         if cfg["model"]["grad_checkpointing"]:
             print("grad_checkpointing true")
             self.model.set_grad_checkpointing(enable=True)
+               
 
     def forward(self, X):
         outputs = self.model(X)
@@ -147,6 +196,7 @@ class Bird2023Model(pl.LightningModule):
         X, y = batch
         pred_y = self.forward(X)
         pred_y = torch.sigmoid(pred_y)
+        pred_y = torch.nan_to_num(pred_y)
 
         return pred_y
 

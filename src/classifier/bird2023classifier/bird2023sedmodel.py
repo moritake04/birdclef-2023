@@ -224,6 +224,8 @@ class Bird2023SEDModel(pl.LightningModule):
 
         if self.cfg["model"]["criterion"] is None:
             self.criterion = BCE2WayLoss(base_loss=cfg["model"]["base_criterion"])
+        elif self.cfg["model"]["criterion"] == "bce_smooth":
+            self.criterion = LabelSmoothingBCEWithLogitsLoss()
         else:
             self.criterion = nn.__dict__[cfg["model"]["criterion"]]()
 

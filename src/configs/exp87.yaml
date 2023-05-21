@@ -2,14 +2,14 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: debug
+  save_name: exp87_effnetb0ns_alltrain_5s_no2nd
   seed: &seed 42
   cv: false
-  wandb_desabled: true
+  wandb_desabled: false
   #fold: [0, 1, 2, 3, 4] # list (0-idx start) or null. Set one element list, hold-out mode.
   #n_splits: 5
   
-oversampling: null
+oversampling: 50
 
 audio:
   sample_rate: 32000 # Hz
@@ -28,7 +28,7 @@ mel_specgram:
   top_db: 80
 
 model:
-  model_name: eca_nfnet_l0
+  model_name: tf_efficientnet_b0.ns_jft_in1k
   pretrained: true
   model_save: &model_save true
   save_weights_only: false
@@ -48,15 +48,15 @@ model:
   mean: [0.485, 0.456, 0.406]
   std: [0.229, 0.224, 0.225]
 
-  criterion: "bce_smooth"
+  criterion: null
   weighted_loss: null
   
-  sed: false
-  #base_criterion: "bce_smooth"
-  #pred_mode: "clipwise"
+  sed: true
+  base_criterion: "bce_smooth"
+  pred_mode: "clipwise"
   
-  pretrained_path: null
-  pretrained_classes: null
+  pretrained_path: ../data/output/pretrain/weights/pretrain_exp17_all/last_epoch.ckpt
+  pretrained_classes: 506
 
   optimizer:
     name: AdamW
