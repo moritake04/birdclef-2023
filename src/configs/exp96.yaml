@@ -2,7 +2,7 @@ general:
   project_name: birdclef2023
   input_path: ../data/input
   output_path: ../data/output
-  save_name: exp95_5s_nosed
+  save_name: exp96_5s_nosed_avgmax
   seed: &seed 42
   cv: true
   wandb_desabled: false
@@ -55,6 +55,8 @@ model:
   base_criterion: null
   pred_mode: null
   
+  avg_and_max: true
+  
   pretrained_path: ../data/output/pretrain/weights/pretrain_exp13_all/last_epoch.ckpt
   pretrained_classes: 506
 
@@ -82,7 +84,7 @@ pl_params:
   enable_checkpointing: *model_save
   enable_model_summary: false
   enable_progress_bar: true
-  check_val_every_n_epoch: 1
+  check_val_every_n_epoch: 5
   #gradient_clip_val: 1.
   #limit_train_batches: 0.01 # for debug
   #limit_val_batches: 0.01 # for debug
@@ -90,18 +92,18 @@ pl_params:
 train_loader:
   batch_size: 32
   shuffle: true
-  num_workers: 12
+  num_workers: 8
   pin_memory: true
   drop_last: true
 valid_loader:
   batch_size: 32
   shuffle: false
-  num_workers: 12
+  num_workers: 8
   pin_memory: true
   drop_last: false
 test_loader:
   batch_size: 8
   shuffle: false
-  num_workers: 12
+  num_workers: 8
   pin_memory: true
   drop_last: false

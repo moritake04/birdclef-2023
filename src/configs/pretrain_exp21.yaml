@@ -92,18 +92,18 @@ pl_params:
 train_loader:
   batch_size: 32
   shuffle: true
-  num_workers: 2
+  num_workers: 8
   pin_memory: true
   drop_last: true
 valid_loader:
   batch_size: 32
   shuffle: false
-  num_workers: 2
+  num_workers: 8
   pin_memory: true
   drop_last: false
 test_loader:
   batch_size: 8
   shuffle: false
-  num_workers: 2
+  num_workers: 8
   pin_memory: true
   drop_last: false

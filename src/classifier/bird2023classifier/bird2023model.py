@@ -5,6 +5,7 @@ import sklearn.metrics
 import timm
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 
 from . import bird2023model, bird2023sedmodel, dataset
@@ -61,9 +62,23 @@ class Bird2023Model(pl.LightningModule):
             )
             
             if "eca_nfnet" in self.cfg["model"]["model_name"]:
-                layers = list(sed_model.encoder) + list(base_model.children())[-1:]
+                if cfg["model"]["avg_and_max"]:
+                    in_features = base_model.head.fc.in_features
+                    fc = nn.Linear(in_features, cfg["model"]["num_classes"], bias=True)
+                    drop = nn.Dropout(p=cfg["model"]["drop_rate"])
+                    self.classifier = nn.Sequential(fc, drop)
+                    layers = list(sed_model.encoder)
+                else:
+                    layers = list(sed_model.encoder) + list(base_model.children())[-1:]
             else:
-                layers = list(sed_model.encoder) + list(base_model.children())[-2:]
+                if cfg["model"]["avg_and_max"]:
+                    in_features = base_model.classifier.in_features
+                    fc = nn.Linear(in_features, cfg["model"]["num_classes"], bias=True)
+                    drop = nn.Dropout(p=cfg["model"]["drop_rate"])
+                    self.classifier = nn.Sequential(fc, drop)
+                    layers = list(sed_model.encoder)
+                else:
+                    layers = list(sed_model.encoder) + list(base_model.children())[-2:]
             
             self.model = nn.Sequential(*layers)
             del sed_model, base_model
@@ -77,6 +92,7 @@ class Bird2023Model(pl.LightningModule):
                 drop_rate=cfg["model"]["drop_rate"],
                 drop_path_rate=cfg["model"]["drop_path_rate"],
             )
+            # avg_and_max は未実装
 
         if cfg["model"]["criterion"] == "bce_smooth":
             self.criterion = LabelSmoothingBCEWithLogitsLoss()
@@ -90,6 +106,12 @@ class Bird2023Model(pl.LightningModule):
 
     def forward(self, X):
         outputs = self.model(X)
+        
+        if self.cfg["model"]["avg_and_max"]:
+            outputs = F.adaptive_max_pool2d(outputs, 1) + F.adaptive_avg_pool2d(outputs, 1)
+            outputs = outputs[:, :, 0, 0]
+            outputs = self.classifier(outputs)
+        
         return outputs
 
     def rand_bbox(self, size, lam):
